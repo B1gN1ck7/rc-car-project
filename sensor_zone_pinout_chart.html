@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sensor zone GPIO pinout</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    .sheet {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 28px 32px 32px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .subtitle {
+      margin: 0 0 22px;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.45;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      text-align: left;
+      padding: 12px 14px;
+      background: #1e293b;
+      color: #f8fafc;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    thead th:first-child { border-radius: 8px 0 0 0; }
+    thead th:last-child { border-radius: 0 8px 0 0; }
+    tbody td {
+      padding: 11px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: middle;
+    }
+    tbody tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    td.zone {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      color: #0f172a;
+    }
+    td.num {
+      font-family: Consolas, "Courier New", monospace;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      width: 110px;
+    }
+    td.phys {
+      font-family: Consolas, "Courier New", monospace;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      width: 130px;
+    }
+    .note {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    code { font-size: 12px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <h1>Infrared zone sensors — GPIO pinout</h1>
+    <p class="subtitle">
+      Matches <code>SENSOR_PINS</code> in <code>backend/app.py</code>. BCM numbering;
+      physical pins are for the standard 40-pin Raspberry Pi header (e.g. Pi 4 / Pi 5).
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Zone</th>
+          <th scope="col">BCM pin</th>
+          <th scope="col">Physical pin</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="zone">zone_front</td>
+          <td class="num">18</td>
+          <td class="phys">12</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_front_right</td>
+          <td class="num">23</td>
+          <td class="phys">16</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_back_right</td>
+          <td class="num">25</td>
+          <td class="phys">22</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_back</td>
+          <td class="num">12</td>
+          <td class="phys">32</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_back_left</td>
+          <td class="num">16</td>
+          <td class="phys">36</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_front_left</td>
+          <td class="num">20</td>
+          <td class="phys">38</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_extra_front</td>
+          <td class="num">21</td>
+          <td class="phys">40</td>
+        </tr>
+        <tr>
+          <td class="zone">zone_extra_back</td>
+          <td class="num">24</td>
+          <td class="phys">18</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">
+      Direction: GPIO input for each zone. Verify wiring against any motor/steering outputs
+      (<code>PINOUTS</code>) so BCM lines are not shared.
+    </p>
+  </div>
+</body>
+</html>

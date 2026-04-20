@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC Car Web HMI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-grid">
+      <div class="main-section">
+        <div class="camera-container panel" id="camera">
+          <img id="camera-stream" src="/video_feed" alt="Camera Stream" />
+        </div>
+        <div class="side-section">
+          <div class="distance-panel panel">
+            <div class="distance-visualization-grid">
+              <!-- Row 1: (1,1) empty, (1,2) extra front, (1,3) empty -->
+              <div></div>
+              <div class="zone zone-extra-front"></div>
+              <div></div>
+              <!-- Row 2: (2,1) front-left, (2,2) front, (2,3) front-right -->
+              <div class="zone zone-front-left"></div>
+              <div class="zone zone-front"></div>
+              <div class="zone zone-front-right"></div>
+              <!-- Row 3: center truck icon between front and rear zones -->
+              <div></div>
+              <div class="zone zone-center">
+                <img id="truck-icon" src="truck-top.png" alt="Truck Top View" style="width:48px;height:48px;display:block;margin:0 auto;" />
+              </div>
+              <div></div>
+              <!-- Row 4: (4,1) back-left, (4,2) back, (4,3) back-right -->
+              <div class="zone zone-back-left"></div>
+              <div class="zone zone-back"></div>
+              <div class="zone zone-back-right"></div>
+              <!-- Row 5: (5,1) empty, (5,2) extra back, (5,3) empty -->
+              <div></div>
+              <div class="zone zone-extra-back"></div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-section">
+        <div class="mic-panel panel">
+          <div class="mic-label">Mic</div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="speaker-panel panel">
+          <div class="speaker-label">Speakers</div>
+          <button class="mute-btn">Mute</button>
+          <input type="range" min="0" max="100" value="75" class="volume-bar">
+        </div>
+        <div class="camera-panel panel">
+          <div class="camera-label">Camera Pan</div>
+          <div class="camera-pan-controls">
+            <button class="cam-pan-btn cam-pan-left">&#8592;</button>
+            <span class="cam-pan-value" id="cam-pan-value">0</span>
+            <button class="cam-pan-btn cam-pan-right">&#8594;</button>
+          </div>
+        </div>
+        <!-- Steering controls are integrated into the navigation panel (left/right/zero). -->
+        <div class="navigation-panel panel">
+          <div class="navigation-label">Navigation</div>
+          <div class="nav-grid">
+            <button class="nav-btn nav-fwd nav-span" style="grid-column: 1 / span 3;">Forward</button>
+            <button class="nav-btn nav-up" style="grid-row: 1; grid-column: 4;">&#8593;</button>
+            <div class="nav-speed-label" style="grid-row: 2; grid-column: 4; text-align:center; font-size:1.2em;">1</div>
+            <button class="nav-btn nav-down" style="grid-row: 3; grid-column: 4;">&#8595;</button>
+            <button class="nav-btn nav-left">&#8592;</button>
+            <button class="nav-btn nav-zero"><span id="steer-value">0</span></button>
+            <button class="nav-btn nav-right">&#8594;</button>
+            <button class="nav-btn nav-back nav-span" style="grid-column: 1 / span 3;">Backward</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

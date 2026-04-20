@@ -1,0 +1,19 @@
+{
+  "name": "rc-car-web-hmi",
+  "version": "1.0.0",
+  "description": "Raspberry Pi RC Car Web HMI",
+  "main": "frontend/app.js",
+  "scripts": {
+    "start": "node frontend/server.js",
+    "dev": "nodemon frontend/server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "pm2": "^6.0.14"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.3"
+  }
+}

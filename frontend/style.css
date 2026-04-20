@@ -1,0 +1,423 @@
+/* Distance visualization 3x3 grid layout */
+.distance-visualization-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 48px 1fr 60px 1fr 48px;
+  gap: 6px;
+  width: 100%;
+  height: 360px;
+  align-items: center;
+  justify-items: center;
+}
+.zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: #fff;
+  border-radius: 6px;
+  min-width: 60px;
+  min-height: 40px;
+  font-size: 1.1em;
+  transition: background 0.2s;
+}
+.zone-red {
+  background: #aa0000 !important;
+  color: #fff !important;
+}
+.zone-yellow {
+  background: #ffeb3b !important;
+  color: #222 !important;
+}
+.zone-center {
+  background: transparent !important;
+  min-width: 60px;
+  min-height: 60px;
+  padding: 0;
+}
+.zone-extra-top,
+.zone-extra-top2,
+.zone-extra-bottom,
+.zone-extra-bottom2 {
+  background: none !important;
+  min-width: 0;
+  min-height: 0;
+}
+.zone-front {
+  grid-column: 2;
+  grid-row: 2;
+}
+.zone-behind {
+  grid-column: 2;
+  grid-row: 4;
+}
+.zone-left {
+  grid-column: 1;
+  grid-row: 3;
+}
+.zone-right {
+  grid-column: 3;
+  grid-row: 3;
+}
+.zone-alert {
+  background: #ffeb3b !important; /* Yellow highlight for alert */
+  color: #222 !important;
+}
+.zone-center svg {
+  display: block;
+  margin: 0 auto;
+}
+/* Highlight for front zone alert */
+/* Remove special front zone alert, all .zone-alert are handled above */
+body, html {
+  background: #000;
+  color: #fff;
+  font-family: 'Segoe UI', sans-serif;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-rows: minmax(0, 7fr) minmax(0, 3fr);
+  height: 100vh;
+  gap: 8px;
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.main-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+  /* height removed for flexibility */
+  align-items: stretch;
+  min-height: 0;
+}
+
+.side-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+.distance-panel {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+
+
+.bottom-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.5fr);
+  gap: 10px;
+  /* height removed for flexibility */
+  align-items: stretch;
+  min-height: 0;
+}
+.mic-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+
+.mic-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+/* Slide Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #444;
+  transition: .4s;
+  border-radius: 24px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #fff;
+  transition: .4s;
+  border-radius: 50%;
+}
+.switch input:checked + .slider {
+  background-color: #00c853;
+}
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
+}
+.speaker-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+.speaker-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.mute-btn {
+  background: #aa0000;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.volume-bar {
+  width: 100px;
+  accent-color: #aa0000;
+}
+.camera-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+.camera-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.camera-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cam-arrow-btn, .cam-zero-btn {
+  background: #222;
+  color: #fff;
+  border: 1px solid #aa0000;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.cam-arrow-btn:hover, .cam-zero-btn:hover {
+  background: #aa0000;
+}
+.camera-offset-label {
+  margin-top: 4px;
+  font-size: 1rem;
+}
+.navigation-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+.navigation-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+  max-width: 260px;
+}
+.nav-span {
+  grid-column: 1 / span 3 !important;
+}
+.nav-btn {
+  background: #222;
+  color: #fff;
+  border: 1px solid #aa0000;
+  border-radius: 6px;
+  padding: 8px 0;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  height: 38px;
+}
+.nav-btn:hover {
+  background: #aa0000;
+}
+.nav-empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.settings-panel .settings-controls {
+  display: flex;
+    height: 100%;
+  gap: 12px;
+}
+
+.settings-panel .camera-section,
+.settings-panel .mic-section,
+.settings-panel .speaker-section {
+  margin-bottom: 8px;
+}
+
+.navigation-panel {
+  flex: 0 0 auto;
+}
+
+.distance-panel {
+  flex: 1 1 auto;
+}
+
+.camera-container {
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  height: 100%;
+  width: min(100%, calc(70vh * 16 / 9));
+  min-height: 0;
+  background: #111;
+  position: relative;
+  padding: 0 !important;
+  align-self: start;
+  justify-self: start;
+}
+
+#camera-stream {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #111;
+  display: block;
+}
+
+.camera-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 66.66vh;
+  background: #222;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.panel {
+  min-height: 0;
+  min-width: 0;
+}
+
+.panel {
+  background: #111;
+  border: 2px solid #aa0000;
+  border-radius: 8px;
+  box-shadow: 0 0 10px #aa000044;
+  padding: 10px;
+}
+
+@media (max-width: 1200px) {
+  .main-section {
+    grid-template-columns: 1.7fr 1fr;
+  }
+
+  .bottom-section {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-rows: auto auto;
+  }
+
+  .main-section {
+    grid-template-columns: 1fr;
+  }
+
+  .distance-visualization-grid {
+    height: 300px;
+  }
+
+  .bottom-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drive-mode #camera {
+  box-shadow: 0 0 20px #00ff00;
+}
+
+.emergency-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #111;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  z-index: 100;
+}
+
+#emergencyStopBtn {
+  background: #aa0000;
+  color: #fff;
+  font-size: 2rem;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 0 10px #aa0000;
+  padding: 16px 48px;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+
+#emergencyStopBtn:active {
+  box-shadow: 0 0 30px #ff0000;
+}
+
+.emergency-flash {
+  animation: flashRed 0.2s alternate 3;
+}
+
+@keyframes flashRed {
+  from { background-color: #220000; }
+  to { background-color: #660000; }
+}
