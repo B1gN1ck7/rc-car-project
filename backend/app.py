@@ -3,9 +3,11 @@ import websockets
 import threading as th
 import threading
 import os
+import sys
 import logging
 import subprocess
 import shutil
+import re
 import numpy as np
 import time
 import json
@@ -19,11 +21,19 @@ except ImportError:
     ON_PI = False
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+# Flask 3.x: forked Flask sessions are incompatible with default SocketIO session handling.
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="threading",
+    manage_session=False,
+)
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 volume_level = 1.0  # Default volume (0.0 to 1.0)
 COMMAND_TIMEOUT_S = float(os.getenv("COMMAND_TIMEOUT_S", "0.5"))
+# If 1, disconnect latches emergencyStop (old behavior). Default 0: only cut throttle/FWD/REV so Wi‑Fi blips do not lock the car until manual reset.
+FAILSAFE_LATCH_ON_DISCONNECT = os.getenv("FAILSAFE_LATCH_ON_DISCONNECT", "0") == "1"
 DIRECTION_NEUTRAL_GAP_S = float(os.getenv("DIRECTION_NEUTRAL_GAP_S", "0.2"))
 MIC_SAMPLE_RATE = int(os.getenv("MIC_SAMPLE_RATE", "48000"))
 MIC_ALSA_DEVICE = os.getenv("MIC_ALSA_DEVICE", "hw:2,0")
@@ -34,32 +44,79 @@ PI_MIC_ALSA_DEVICE = os.getenv("PI_MIC_ALSA_DEVICE", "hw:2,0")
 PI_MIC_SAMPLE_RATE = int(os.getenv("PI_MIC_SAMPLE_RATE", "48000"))
 PI_MIC_CHANNELS = int(os.getenv("PI_MIC_CHANNELS", "1"))
 PI_MIC_GAIN = float(os.getenv("PI_MIC_GAIN", "2.0"))
-PI_MIC_RETRY_LOG_INTERVAL_S = float(os.getenv("PI_MIC_RETRY_LOG_INTERVAL_S", "15.0"))
 mic_audio = {
     "proc": None,
     "rate": None,
     "channels": None,
     "device": None,
 }
-_last_pi_mic_open_fail_log_ts = 0.0
+
+
+def _probe_alsa_capture_devices():
+    """Discover ALSA capture devices to improve arecord compatibility."""
+    devices = []
+    seen = set()
+
+    # Highest-priority user-configured device first.
+    for base in [PI_MIC_ALSA_DEVICE, "default"]:
+        if base and base not in seen:
+            devices.append(base)
+            seen.add(base)
+        if base.startswith("hw:"):
+            plug = "plughw:" + base.split(":", 1)[1]
+            if plug not in seen:
+                devices.append(plug)
+                seen.add(plug)
+
+    # Parse hardware capture cards from arecord -l (e.g. card 1, device 0 -> hw:1,0).
+    try:
+        out = subprocess.check_output(["arecord", "-l"], stderr=subprocess.STDOUT, text=True)
+        for card, dev in re.findall(r"card\s+(\d+):.*?device\s+(\d+):", out):
+            for d in (f"plughw:{card},{dev}", f"hw:{card},{dev}"):
+                if d not in seen:
+                    devices.append(d)
+                    seen.add(d)
+    except Exception:
+        pass
+
+    # Add named ALSA PCMs from arecord -L.
+    try:
+        out = subprocess.check_output(["arecord", "-L"], stderr=subprocess.STDOUT, text=True)
+        for line in out.splitlines():
+            name = line.strip()
+            if not name or name.startswith(" "):
+                continue
+            if name in {"null"}:
+                continue
+            if name not in seen:
+                devices.append(name)
+                seen.add(name)
+    except Exception:
+        pass
+
+    return devices
 
 
 def run_pi_mic_capture():
-    global _last_pi_mic_open_fail_log_ts
     if not PI_MIC_ENABLE:
         return
     if shutil.which("arecord") is None:
         print("Pi mic capture disabled: arecord not found (install alsa-utils)")
         return
-    candidate_devices = [PI_MIC_ALSA_DEVICE, "default"]
-    if PI_MIC_ALSA_DEVICE.startswith("hw:"):
-        candidate_devices.insert(0, "plughw:" + PI_MIC_ALSA_DEVICE.split(":", 1)[1])
+    candidate_devices = _probe_alsa_capture_devices()
     candidate_channels = [PI_MIC_CHANNELS, 1, 2]
     candidate_rates = [PI_MIC_SAMPLE_RATE, 48000, 44100, 16000]
+    last_probe_refresh = 0.0
 
     while True:
         proc = None
         try:
+            now = time.time()
+            # Refresh periodically in case USB mic appears later.
+            if (now - last_probe_refresh) > 10:
+                candidate_devices = _probe_alsa_capture_devices()
+                last_probe_refresh = now
+
             started = False
             for device in dict.fromkeys(candidate_devices):
                 for channels in dict.fromkeys(candidate_channels):
@@ -104,10 +161,8 @@ def run_pi_mic_capture():
                 if started:
                     break
             if not started:
-                now = time.monotonic()
-                if now - _last_pi_mic_open_fail_log_ts >= PI_MIC_RETRY_LOG_INTERVAL_S:
-                    print("Pi mic capture could not open any ALSA input config")
-                    _last_pi_mic_open_fail_log_ts = now
+                print("Pi mic capture could not open any ALSA input config "
+                      f"(tried {len(candidate_devices)} device names)")
         except Exception as e:
             print(f"Pi mic capture error: {e}")
         finally:
@@ -277,13 +332,13 @@ def handle_volume_update(data):
 ## -------------------+-----+----------+-----------+---------------------------
 ## zone_front         | 18  |    12    | Input     | IR obstacle — front
 ## zone_front_right   | 23  |    16    | Input     | IR obstacle — front-right
-## zone_back_right    | 25  |    22    | Input     | IR obstacle — back-right
+## zone_back_right    | 24  |    18    | Input     | IR obstacle — back-right
 ## zone_back          | 12  |    32    | Input     | IR obstacle — back
 ## zone_back_left     | 16  |    36    | Input     | IR obstacle — back-left
 ## zone_front_left    | 20  |    38    | Input     | IR obstacle — front-left
-## zone_extra_front   | 21  |    40    | Input     | IR obstacle — extra front
-## zone_extra_back    | 24  |    18    | Input     | IR obstacle — extra back
-## (BCM inputs used by this project: 12,16,18,20,21,23,24,25)
+## zone_extra_front   | 27  |    13    | Input     | IR obstacle — extra front
+## zone_extra_back    | 17  |    11    | Input     | IR obstacle — extra back
+## (BCM inputs used by this project: 12,16,17,18,20,23,24,27)
 ##
 ## --- OUTPUTS (PINOUTS): must not reuse sensor BCM lines above ---
 ## Name                   | BCM | Physical | Direction | Description
@@ -293,24 +348,27 @@ def handle_volume_update(data):
 ## steering_pwm           | 26  |    37    | Output    | Steering servo PWM (~50 Hz)
 ## camera_pan_pwm         | 19  |    35    | Output    | Camera pan servo PWM
 ## backward_signal        | 22  |    15    | Output    | HIGH only when reverse active
+## light_toggle           |  4  |     7    | Output    | HIGH when light enabled
 PINOUTS = {
     'motor_forward': 5,    # BCM 5, physical 29
     'forward_backward_switch': 6,  # BCM 6, physical 31 (HIGH=fwd, LOW=rev/idle)
     'steering_pwm': 26,    # BCM 26, physical 37
     'camera_pan_pwm': 19,  # BCM 19, physical 35
     'backward_signal': 22,  # BCM 22, physical 15 (HIGH when reverseActive)
+    'light_toggle': 4,     # BCM 4, physical 7 (HIGH when lightOn=True)
 }
 SENSOR_PINS = {
     'zone_front': 18,        # BCM 18, physical 12
     'zone_front_right': 23,  # BCM 23, physical 16
-    'zone_back_right': 25,   # BCM 25, physical 22
+    'zone_back_right': 24,   # BCM 24, physical 18
     'zone_back': 12,         # BCM 12, physical 32
     'zone_back_left': 16,    # BCM 16, physical 36
     'zone_front_left': 20,   # BCM 20, physical 38
-    'zone_extra_front': 21,  # BCM 21, physical 40
-    'zone_extra_back': 24,   # BCM 24, physical 18
+    'zone_extra_front': 27,  # BCM 27, physical 13
+    'zone_extra_back': 17,   # BCM 17, physical 11
 }
 sensor_state = {k: 1 for k in SENSOR_PINS}
+bench_seq = 0
 
 if ON_PI:
     try:
@@ -320,7 +378,7 @@ if ON_PI:
         ON_PI = False
 
 def poll_sensors():
-    global ON_PI
+    global ON_PI, bench_seq
     if not ON_PI:
         return
     try:
@@ -339,11 +397,16 @@ def poll_sensors():
                 sensor_state[zone] = val
                 updated = True
         if updated:
-            socketio.emit('sensor_update', dict(sensor_state))
+            bench_seq += 1
+            payload = dict(sensor_state)
+            socketio.emit('sensor_update', payload)
         time.sleep(0.1)
 
 @socketio.on('connect')
 def handle_connect():
+    sid = request.sid
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    print(f"[SOCKET] connect sid={sid} ip={client_ip}")
     # Send current sensor state on connect
     socketio.emit('sensor_update', dict(sensor_state))
 
@@ -352,9 +415,19 @@ def handle_connect():
 def handle_disconnect():
     global active_control_sid
     sid = request.sid
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    idle_ms = int((time.monotonic() - last_state_update_ts) * 1000)
+    was_active = sid == active_control_sid
+    print(
+        f"[SOCKET] disconnect sid={sid} ip={client_ip} "
+        f"was_active={was_active} active_sid={active_control_sid} idle_ms={idle_ms}"
+    )
     if sid == active_control_sid:
         active_control_sid = None
-        force_safe_state(reason="controller disconnected")
+        if FAILSAFE_LATCH_ON_DISCONNECT:
+            force_safe_state(reason="controller disconnected")
+        else:
+            neutralize_motion(reason="controller disconnected")
         apply_gpio_outputs_from_state()
 
 state = {
@@ -364,6 +437,7 @@ state = {
     "steering": 0,
     "steeringTrim": 0,
     "cameraAngle": 0,
+    "lightOn": False,
     "forwardActive": False,
     "reverseActive": False,
     "emergencyStop": False
@@ -389,8 +463,21 @@ def save_state():
         json.dump(state, f)
 
 
+def neutralize_motion(reason="unknown"):
+    """Cut throttle and direction only; does not latch emergencyStop (recoverable after reconnect)."""
+    global last_neutral_ts, last_nonzero_dir
+    with state_lock:
+        state["throttle"] = 0
+        state["forwardActive"] = False
+        state["reverseActive"] = False
+        last_neutral_ts = time.monotonic()
+        last_nonzero_dir = 0
+        save_state()
+    print(f"[FAILSAFE] Motion neutralized ({reason})")
+
+
 def force_safe_state(reason="unknown"):
-    """Server-side fail-safe: neutralize motion commands."""
+    """Server-side fail-safe: neutralize motion and latch emergency stop until the client clears it."""
     global last_neutral_ts, last_nonzero_dir
     with state_lock:
         state["throttle"] = 0
@@ -412,6 +499,7 @@ def apply_gpio_outputs_from_state():
         GPIO.setup(PINOUTS['motor_forward'], GPIO.OUT, initial=GPIO.LOW)
         GPIO.setup(PINOUTS['forward_backward_switch'], GPIO.OUT)
         GPIO.setup(PINOUTS['backward_signal'], GPIO.OUT)
+        GPIO.setup(PINOUTS['light_toggle'], GPIO.OUT)
 
         if state.get("emergencyStop", False):
             is_forward = False
@@ -429,6 +517,10 @@ def apply_gpio_outputs_from_state():
         GPIO.output(
             PINOUTS['backward_signal'],
             GPIO.HIGH if is_reverse else GPIO.LOW
+        )
+        GPIO.output(
+            PINOUTS['light_toggle'],
+            GPIO.HIGH if state.get('lightOn', False) else GPIO.LOW
         )
         if is_forward or is_reverse:
             if motor_pwm is None:
@@ -483,6 +575,12 @@ def index():
 @socketio.on('state_update')
 def handle_state_update(data):
     global active_control_sid, last_state_update_ts, last_neutral_ts, last_nonzero_dir
+    sid = request.sid
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if active_control_sid != sid:
+        print(
+            f"[CONTROL] ownership sid={sid} ip={client_ip} previous={active_control_sid}"
+        )
     active_control_sid = request.sid
     now = time.monotonic()
     with state_lock:
@@ -513,10 +611,6 @@ def handle_state_update(data):
         state['forwardActive'] = requested_dir == 1
         state['reverseActive'] = requested_dir == -1
 
-        # Any explicit drive direction command clears a stale emergency-stop latch.
-        if requested_dir != 0:
-            state['emergencyStop'] = False
-
         # Emergency stop should always force neutral.
         if state.get('emergencyStop', False):
             state['throttle'] = 0
@@ -541,12 +635,21 @@ import io
 from flask import Response
 try:
     import cv2
+    try:
+        # Avoid flooding stderr when probing non-capture /dev/video* nodes (common on Pi + libcamera).
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
+    except Exception:
+        pass
 except ImportError:
     cv2 = None
 try:
     from picamera2 import Picamera2
 except ImportError:
     Picamera2 = None
+try:
+    from libcamera import Transform
+except ImportError:
+    Transform = None
 try:
     from PIL import Image
 except ImportError:
@@ -556,6 +659,15 @@ CAMERA_SATURATION = float(os.getenv("CAMERA_SATURATION", "1.05"))
 CAMERA_CONTRAST = float(os.getenv("CAMERA_CONTRAST", "1.03"))
 CAMERA_BRIGHTNESS = float(os.getenv("CAMERA_BRIGHTNESS", "0.0"))
 CAMERA_AWB_ENABLE = os.getenv("CAMERA_AWB_ENABLE", "1") == "1"
+CAMERA_FLIP_180 = os.getenv("CAMERA_FLIP_180", "1") == "1"
+CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
+# On Pi, OpenCV index 0 is often not a real capture device (libcamera exposes many nodes). Use Picamera2 or set CAMERA_OPENCV_FALLBACK=1 after choosing the right device.
+CAMERA_OPENCV_FALLBACK = os.getenv("CAMERA_OPENCV_FALLBACK", "0") == "1"
+CAMERA_CAPTURE_FPS = float(os.getenv("CAMERA_CAPTURE_FPS", "20"))
+
+camera_state_lock = threading.Lock()
+camera_thread_started = False
+latest_camera_jpeg = None
 
 
 def encode_dummy_frame():
@@ -571,74 +683,165 @@ def encode_dummy_frame():
         return buf.getvalue()
     return b""
 
-def gen_camera():
-    # Pi5-friendly order: Picamera2 -> OpenCV -> guaranteed dummy frames.
-    if ON_PI and Picamera2 is not None:
-        picam2 = None
-        try:
-            picam2 = Picamera2()
-            config = picam2.create_video_configuration(main={"size": (1280, 720)})
-            picam2.configure(config)
-            picam2.start()
-            time.sleep(0.2)
-            # Apply conservative defaults to reduce blue cast indoors.
-            picam2.set_controls({
-                "AwbEnable": CAMERA_AWB_ENABLE,
-                "AeEnable": True,
-                "Saturation": CAMERA_SATURATION,
-                "Contrast": CAMERA_CONTRAST,
-                "Brightness": CAMERA_BRIGHTNESS,
-            })
-            while True:
-                frame = picam2.capture_array()
-                if frame is None:
-                    time.sleep(0.02)
-                    continue
-                if cv2 is not None:
-                    ret, jpeg = cv2.imencode('.jpg', frame)
-                    if ret:
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
-                        continue
-                dummy = encode_dummy_frame()
-                if dummy:
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + dummy + b'\r\n')
-                time.sleep(0.03)
-        except Exception as e:
-            print(f"Picamera2 failed, falling back to OpenCV/dummy stream: {e}")
-        finally:
-            if picam2 is not None:
-                try:
-                    picam2.stop()
-                except Exception:
-                    pass
+
+def encode_frame_jpeg(frame):
+    """Encode numpy frame to JPEG bytes using OpenCV, with PIL fallback."""
+    if frame is None:
+        return None
 
     if cv2 is not None:
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         try:
-            while cap.isOpened():
+            ret, jpeg = cv2.imencode('.jpg', frame)
+            if ret:
+                return jpeg.tobytes()
+        except Exception:
+            pass
+
+    if Image is not None:
+        try:
+            arr = frame
+            # Picamera2 often provides RGB/RGBA; normalize for PIL.
+            if hasattr(arr, "shape") and len(arr.shape) == 3:
+                ch = arr.shape[2]
+                if ch == 4:
+                    img = Image.fromarray(arr, mode="RGBA").convert("RGB")
+                else:
+                    img = Image.fromarray(arr)
+            else:
+                img = Image.fromarray(arr)
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG')
+            return buf.getvalue()
+        except Exception:
+            return None
+
+    return None
+
+def _camera_capture_loop():
+    """Single producer loop: one camera instance feeds all HTTP clients."""
+    global latest_camera_jpeg
+
+    picam2 = None
+    cap = None
+    using_dummy = False
+
+    try:
+        if ON_PI and Picamera2 is not None:
+            try:
+                picam2 = Picamera2(CAMERA_INDEX)
+                print(f"Starting Picamera2 on camera index {CAMERA_INDEX}")
+                if CAMERA_FLIP_180 and Transform is not None:
+                    config = picam2.create_video_configuration(
+                        main={"size": (1280, 720)},
+                        transform=Transform(hflip=1, vflip=1),
+                    )
+                else:
+                    config = picam2.create_video_configuration(main={"size": (1280, 720)})
+                picam2.configure(config)
+                picam2.start()
+                time.sleep(0.2)
+                picam2.set_controls({
+                    "AwbEnable": CAMERA_AWB_ENABLE,
+                    "AeEnable": True,
+                    "Saturation": CAMERA_SATURATION,
+                    "Contrast": CAMERA_CONTRAST,
+                    "Brightness": CAMERA_BRIGHTNESS,
+                })
+            except Exception as e:
+                print(f"Picamera2 failed, falling back to OpenCV/dummy stream: {e}")
+                if ON_PI and not CAMERA_OPENCV_FALLBACK:
+                    print(
+                        "OpenCV V4L fallback skipped on Pi (noisy/wrong /dev/video*). "
+                        "Fix Picamera2 or set CAMERA_OPENCV_FALLBACK=1 if using a USB cam."
+                    )
+                picam2 = None
+
+        if picam2 is None:
+            use_opencv = cv2 is not None and ((not ON_PI) or CAMERA_OPENCV_FALLBACK)
+            if use_opencv:
+                idx = os.getenv("CAMERA_OPENCV_INDEX", "0")
+                if idx.isdigit():
+                    cap_idx = int(idx)
+                else:
+                    cap_idx = idx
+                if sys.platform == "linux" and hasattr(cv2, "CAP_V4L2"):
+                    cap = cv2.VideoCapture(cap_idx, cv2.CAP_V4L2)
+                else:
+                    n = int(cap_idx) if isinstance(cap_idx, int) or (isinstance(cap_idx, str) and cap_idx.isdigit()) else 0
+                    cap = cv2.VideoCapture(n)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                if not cap.isOpened():
+                    cap = None
+
+        if picam2 is None and cap is None:
+            using_dummy = True
+            print("Camera source unavailable; serving dummy frames.")
+
+        period_s = max(0.01, 1.0 / CAMERA_CAPTURE_FPS)
+        while True:
+            jpeg_bytes = None
+
+            if picam2 is not None:
+                frame = picam2.capture_array()
+                if frame is not None:
+                    if CAMERA_FLIP_180 and Transform is None and cv2 is not None:
+                        frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    jpeg_bytes = encode_frame_jpeg(frame)
+
+            elif cap is not None:
                 ret, frame = cap.read()
-                if not ret:
-                    time.sleep(0.02)
-                    continue
-                ret, jpeg = cv2.imencode('.jpg', frame)
-                if not ret:
-                    time.sleep(0.02)
-                    continue
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
-        finally:
+                if ret and frame is not None:
+                    if CAMERA_FLIP_180:
+                        frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    jpeg_bytes = encode_frame_jpeg(frame)
+
+            if jpeg_bytes is None:
+                jpeg_bytes = encode_dummy_frame()
+                if not using_dummy:
+                    using_dummy = True
+                    print("Camera frame encode failed; switching to dummy frames.")
+            elif using_dummy:
+                using_dummy = False
+                print("Camera frames recovered from dummy fallback.")
+
+            with camera_state_lock:
+                latest_camera_jpeg = jpeg_bytes
+            time.sleep(period_s)
+
+    except Exception as e:
+        print(f"Camera capture loop crashed: {e}")
+    finally:
+        if picam2 is not None:
+            try:
+                picam2.stop()
+            except Exception:
+                pass
+        if cap is not None:
             cap.release()
 
+
+def _ensure_camera_thread():
+    global camera_thread_started
+    with camera_state_lock:
+        if camera_thread_started:
+            return
+        camera_thread_started = True
+    t = threading.Thread(target=_camera_capture_loop, daemon=True)
+    t.start()
+
+
+def gen_camera():
+    _ensure_camera_thread()
     while True:
-        dummy = encode_dummy_frame()
-        if dummy:
+        with camera_state_lock:
+            jpeg_bytes = latest_camera_jpeg
+        if jpeg_bytes is None:
+            jpeg_bytes = encode_dummy_frame()
+        if jpeg_bytes:
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + dummy + b'\r\n')
-        time.sleep(0.1)
+                   b'Content-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n')
+        time.sleep(0.03)
 
 @app.route('/video_feed')
 def video_feed():

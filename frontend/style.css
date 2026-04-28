@@ -213,6 +213,14 @@ body, html {
   font-weight: bold;
   margin-bottom: 4px;
 }
+.light-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.light-label {
+  font-weight: bold;
+}
 .camera-controls {
   display: flex;
   gap: 8px;

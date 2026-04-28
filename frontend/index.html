@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RC Car Web HMI</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -60,6 +61,13 @@
             <button class="cam-pan-btn cam-pan-left">&#8592;</button>
             <span class="cam-pan-value" id="cam-pan-value">0</span>
             <button class="cam-pan-btn cam-pan-right">&#8594;</button>
+          </div>
+          <div class="light-toggle-row">
+            <span class="light-label">Light</span>
+            <label class="switch">
+              <input type="checkbox" id="light-toggle">
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
         <!-- Steering controls are integrated into the navigation panel (left/right/zero). -->

@@ -47,6 +47,16 @@ app.use('/mic', (req, res, next) => {
 
 app.use(express.static(path.join(__dirname)));
 
+app.get('/favicon.ico', (req, res) => {
+  const icoPath = path.join(__dirname, 'favicon.ico');
+  if (fs.existsSync(icoPath)) {
+    res.sendFile(icoPath);
+    return;
+  }
+  // Avoid noisy 404 logs when no .ico file is present.
+  res.status(204).end();
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });

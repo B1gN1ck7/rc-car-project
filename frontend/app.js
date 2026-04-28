@@ -135,6 +135,7 @@ if (micToggle) {
 const camPanValueEl = document.getElementById('cam-pan-value');
 const camPanLeftBtn = document.querySelector('.cam-pan-btn.cam-pan-left');
 const camPanRightBtn = document.querySelector('.cam-pan-btn.cam-pan-right');
+const lightToggle = document.getElementById('light-toggle');
 let camPanSetting = 0;
 function updateCamPanUI() {
   if (camPanValueEl) camPanValueEl.textContent = camPanSetting;
@@ -156,6 +157,11 @@ if (camPanRightBtn) {
   });
 }
 updateCamPanUI();
+if (lightToggle) {
+  lightToggle.addEventListener('change', () => {
+    state.lightOn = !!lightToggle.checked;
+  });
+}
 
 // --- Steering via Navigation Panel ---
 const steerValueEl = document.getElementById('steer-value');
@@ -223,25 +229,25 @@ const backwardBtn = document.querySelector('.nav-btn.nav-back');
 if (backwardBtn) {
   // Mouse input
   backwardBtn.addEventListener('mousedown', () => {
-    requestReverseActive(true);
+    state.reverseActive = true;
   });
   backwardBtn.addEventListener('mouseup', () => {
-    requestReverseActive(false);
+    state.reverseActive = false;
   });
   backwardBtn.addEventListener('mouseleave', () => {
-    requestReverseActive(false);
+    state.reverseActive = false;
   });
   backwardBtn.addEventListener('mouseout', () => {
-    requestReverseActive(false);
+    state.reverseActive = false;
   });
   // Touch input (mobile)
   backwardBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    requestReverseActive(true);
+    state.reverseActive = true;
   });
   backwardBtn.addEventListener('touchend', (e) => {
     e.preventDefault();
-    requestReverseActive(false);
+    state.reverseActive = false;
   });
 }
 // --- Speed control logic ---
@@ -282,30 +288,11 @@ const state = {
   steering: 0,
   steeringTrim: 0,
   cameraAngle: 0,
+  lightOn: false,
   forwardActive: false,
   reverseActive: false,
   emergencyStop: false
 };
-
-function emitStateNow() {
-  if (socket && socket.connected) {
-    socket.emit('state_update', state);
-  }
-}
-
-function requestForwardActive(active) {
-  state.emergencyStop = false;
-  state.forwardActive = active;
-  if (active) state.reverseActive = false;
-  emitStateNow();
-}
-
-function requestReverseActive(active) {
-  state.emergencyStop = false;
-  state.reverseActive = active;
-  if (active) state.forwardActive = false;
-  emitStateNow();
-}
 
 // Expose the selected speed multiplier as a state property sent to the backend.
 Object.defineProperty(state, 'speedFraction', {
@@ -334,7 +321,6 @@ function emergencyStop() {
   state.forwardActive = false;
   state.reverseActive = false;
   state.emergencyStop = true;
-  emitStateNow();
   document.body.classList.add("emergency-flash");
   setTimeout(() => {
     document.body.classList.remove("emergency-flash");
@@ -388,7 +374,6 @@ function connectSocket() {
   socket = io(BACKEND_BASE, { path: '/socket.io' });
   socket.on('connect', () => {
     console.log('Connected to backend');
-    ensurePiMicAudioContext().catch(() => {});
   });
   socket.on('disconnect', () => {
     console.log('Disconnected from backend');
@@ -426,25 +411,25 @@ const forwardBtn = document.querySelector('.nav-btn.nav-fwd');
 if (forwardBtn) {
   // Mouse input
   forwardBtn.addEventListener('mousedown', () => {
-    requestForwardActive(true);
+    state.forwardActive = true;
   });
   forwardBtn.addEventListener('mouseup', () => {
-    requestForwardActive(false);
+    state.forwardActive = false;
   });
   forwardBtn.addEventListener('mouseleave', () => {
-    requestForwardActive(false);
+    state.forwardActive = false;
   });
   forwardBtn.addEventListener('mouseout', () => {
-    requestForwardActive(false);
+    state.forwardActive = false;
   });
   // Touch input (mobile)
   forwardBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    requestForwardActive(true);
+    state.forwardActive = true;
   });
   forwardBtn.addEventListener('touchend', (e) => {
     e.preventDefault();
-    requestForwardActive(false);
+    state.forwardActive = false;
   });
 }
 
